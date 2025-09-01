@@ -8,9 +8,10 @@ import (
 // ConfigStoreType represents the type of config store.
 type ConfigStoreType string
 
-// ConfigStoreTypeSQLite is the type of config store for SQLite.
+// Supported config store types.
 const (
-	ConfigStoreTypeSQLite ConfigStoreType = "sqlite"
+	ConfigStoreTypeSQLite   ConfigStoreType = "sqlite"
+	ConfigStoreTypePostgres ConfigStoreType = "postgres"
 )
 
 // Config represents the configuration for the config store.
@@ -20,13 +21,23 @@ type Config struct {
 	Config  any             `json:"config"`
 }
 
-// UnmarshalJSON unmarshals the config from JSON.
+// SQLiteConfig represents configuration for SQLite.
+type SQLiteConfig struct {
+	Path string `json:"path"`
+}
+
+// PostgresConfig represents configuration for Postgres.
+type PostgresConfig struct {
+	ConnectionString string `json:"connectionString"`
+}
+
+// UnmarshalJSON implements custom unmarshaling for Config.
 func (c *Config) UnmarshalJSON(data []byte) error {
-	// First, unmarshal into a temporary struct to get the basic fields
+	// Temporary struct to extract type and raw config
 	type TempConfig struct {
 		Enabled bool            `json:"enabled"`
 		Type    ConfigStoreType `json:"type"`
-		Config  json.RawMessage `json:"config"` // Keep as raw JSON
+		Config  json.RawMessage `json:"config"`
 	}
 
 	var temp TempConfig
@@ -34,16 +45,17 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("failed to unmarshal config store config: %w", err)
 	}
 
-	// Set basic fields
+	// Assign basic fields
 	c.Enabled = temp.Enabled
 	c.Type = temp.Type
 
+	// If disabled, no further parsing needed
 	if !temp.Enabled {
 		c.Config = nil
 		return nil
 	}
 
-	// Parse the config field based on type
+	// Parse based on type
 	switch temp.Type {
 	case ConfigStoreTypeSQLite:
 		var sqliteConfig SQLiteConfig
@@ -51,6 +63,13 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("failed to unmarshal sqlite config: %w", err)
 		}
 		c.Config = &sqliteConfig
+
+	case ConfigStoreTypePostgres:
+		var pgConfig PostgresConfig
+		if err := json.Unmarshal(temp.Config, &pgConfig); err != nil {
+			return fmt.Errorf("failed to unmarshal postgres config: %w", err)
+		}
+		c.Config = &pgConfig
 
 	default:
 		return fmt.Errorf("unknown config store type: %s", temp.Type)
