@@ -13,7 +13,7 @@ export const configApi = baseApi.injectEndpoints({
 		}),
 
 		// Update core configuration
-		updateCoreConfig: builder.mutation<null, CoreConfig>({
+		updateCoreConfig: builder.mutation<null, BifrostConfig>({
 			query: (data) => ({
 				url: "/config",
 				method: "PUT",
