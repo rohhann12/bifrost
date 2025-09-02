@@ -14,6 +14,7 @@ import { validateOrigins } from "@/lib/utils/validation";
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import DbConfigCard from "@/components/DbConfig";
 
 const defaultConfig = {
 	drop_excess_requests: false,
@@ -25,6 +26,12 @@ const defaultConfig = {
 	allow_direct_keys: false,
 	plugins: [],
 	allowed_origins: [],
+	config_store: {
+    type: "sqlite", // or "postgres"
+    config: {
+      path: "./bifrost.db" // sqlite default
+    }
+  }
 };
 
 export default function ConfigPage() {
@@ -355,6 +362,9 @@ export default function ConfigPage() {
 							/>
 						</div>
 						{needsRestart && <RestartWarning />}
+					</div>
+					<div className="mt-6">
+						<DbConfigCard />
 					</div>
 				</div>
 			</div>
