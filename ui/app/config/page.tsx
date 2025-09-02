@@ -16,21 +16,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import DbConfigCard from "@/components/DbConfig";
 
-const defaultConfig = {
-	drop_excess_requests: false,
-	initial_pool_size: 300,
-	prometheus_labels: [],
-	enable_logging: true,
-	enable_governance: true,
-	enforce_governance_header: false,
-	allow_direct_keys: false,
-	plugins: [],
-	allowed_origins: [],
-	config_store: {
-    type: "sqlite", // or "postgres"
-    config: {
-      path: "./bifrost.db" // sqlite default
-    }
+const defaultConfig: CoreConfig = {
+  drop_excess_requests: false,
+  initial_pool_size: 300,
+  prometheus_labels: [],
+  enable_logging: true,
+  enable_governance: true,
+  enforce_governance_header: false,
+  allow_direct_keys: false,
+  allowed_origins: [],
+  db: {
+    type: "sqlite",
+    config: { path: "./bifrost.db" }
+  },
+  config_store: {
+    type: "sqlite",
+    config: { path: "./bifrost.db" }
   }
 };
 
@@ -79,7 +80,7 @@ export default function ConfigPage() {
 	const updateConfig = useCallback(
 		async (field: keyof CoreConfig, value: boolean | number | string[]) => {
 			try {
-				await updateCoreConfig({ ...(config ?? defaultConfig), [field]: value }).unwrap();
+				await updateCoreConfig({ ...(config ?? defaultConfig), [field]: value } as CoreConfig).unwrap();
 				toast.success("Core setting updated successfully.");
 			} catch (error) {
 				toast.error(getErrorMessage(error));

@@ -16,7 +16,7 @@ import {
   useGetCoreConfigQuery,
   useUpdateCoreConfigMutation,
 } from "@/lib/store/apis/configApi";
-import { BifrostConfig, DatabaseConfig, PostgresConfig, SqliteConfig } from "@/lib/types/config";
+import { BifrostConfig, CoreConfig, DatabaseConfig, PostgresConfig, SqliteConfig } from "@/lib/types/config";
 import { toast } from "sonner";
 
 const DbConfigCard = () => {
@@ -81,15 +81,13 @@ const DbConfigCard = () => {
 
       const dbConfig: DatabaseConfig = dbType === "sqlite" ? sqliteConfig : postgresConfig;
 
-      const payload: BifrostConfig = {
-        ...data!, // keep existing values like is_db_connected
-        client_config: {
-          ...data!.client_config,
-          db: dbConfig, // overwrite db config
-        },
+      const payload: CoreConfig = {
+        ...data!.client_config,
+        db: dbConfig,
       };
 
       await updateCoreConfig(payload).unwrap();
+
       toast.success("Database config updated successfully.");
     } catch (err: any) {
       console.error("Failed to update config:", err);
