@@ -34,8 +34,8 @@ const DbConfigCard = () => {
     dbname: "",
     sslmode: "disable",
   });
-
-  // 🔹 Prefill when API data arrives
+// ismei save changes wale button pr migration run krdo agr 
+// changes h toh
   useEffect(() => {
     if (data) {
       const db = (data.client_config as any).db;

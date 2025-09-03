@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/fasthttp/router"
@@ -10,6 +12,7 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/maximhq/bifrost/transports/bifrost-http/utils"
 	"github.com/valyala/fasthttp"
 )
 
@@ -19,6 +22,7 @@ type ConfigHandler struct {
 	client *bifrost.Bifrost
 	logger schemas.Logger
 	store  *lib.Config
+	appDir string
 }
 
 // NewConfigHandler creates a new handler for configuration management.
@@ -71,8 +75,7 @@ func (h *ConfigHandler) GetConfig(ctx *fasthttp.RequestCtx) {
 }
 
 // handleUpdateConfig updates the core configuration settings.
-// Currently, it supports hot-reloading of the `drop_excess_requests` setting.
-// Note that settings like `prometheus_labels` cannot be changed at runtime.
+// It supports hot-reloading of db config and client config.
 func (h *ConfigHandler) handleUpdateConfig(ctx *fasthttp.RequestCtx) {
 	if h.store.ConfigStore == nil {
 		SendError(ctx, fasthttp.StatusInternalServerError, "Config store not initialized", h.logger)
@@ -80,25 +83,23 @@ func (h *ConfigHandler) handleUpdateConfig(ctx *fasthttp.RequestCtx) {
 	}
 
 	var req configstore.ClientConfig
-
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid request format: %v", err), h.logger)
 		return
 	}
 
-	// Get current config with proper locking
+	// copy current config
 	currentConfig := h.store.ClientConfig
 	updatedConfig := currentConfig
 
+	// hot-reload settings
 	if req.DropExcessRequests != currentConfig.DropExcessRequests {
 		h.client.UpdateDropExcessRequests(req.DropExcessRequests)
 		updatedConfig.DropExcessRequests = req.DropExcessRequests
 	}
-
 	if !slices.Equal(req.PrometheusLabels, currentConfig.PrometheusLabels) {
 		updatedConfig.PrometheusLabels = req.PrometheusLabels
 	}
-
 	if !slices.Equal(req.AllowedOrigins, currentConfig.AllowedOrigins) {
 		updatedConfig.AllowedOrigins = req.AllowedOrigins
 	}
@@ -109,13 +110,31 @@ func (h *ConfigHandler) handleUpdateConfig(ctx *fasthttp.RequestCtx) {
 	updatedConfig.EnforceGovernanceHeader = req.EnforceGovernanceHeader
 	updatedConfig.AllowDirectKeys = req.AllowDirectKeys
 
-	// Update the store with the new config
+	// ✅ update in-memory config
 	h.store.ClientConfig = updatedConfig
 
+	// ✅ persist in db
 	if err := h.store.ConfigStore.UpdateClientConfig(&updatedConfig); err != nil {
 		h.logger.Warn(fmt.Sprintf("failed to save configuration: %v", err))
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to save configuration: %v", err), h.logger)
 		return
+	}
+
+	// ✅ also save to config.json
+	configDir := utils.GetDefaultConfigDir(h.appDir)
+	configPath := filepath.Join(configDir, "config.json")
+
+	data, err := json.MarshalIndent(updatedConfig, "", "  ")
+	if err != nil {
+		h.logger.Warn(fmt.Sprintf("failed to marshal config.json: %v", err))
+	} else {
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			h.logger.Warn(fmt.Sprintf("failed to create config dir: %v", err))
+		} else if err := os.WriteFile(configPath, data, 0644); err != nil {
+			h.logger.Warn(fmt.Sprintf("failed to write config.json: %v", err))
+		} else {
+			h.logger.Info(fmt.Sprintf("config.json updated at %s", configPath))
+		}
 	}
 
 	ctx.SetStatusCode(fasthttp.StatusOK)

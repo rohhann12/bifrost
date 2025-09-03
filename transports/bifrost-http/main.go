@@ -63,7 +63,6 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -78,6 +77,7 @@ import (
 	"github.com/maximhq/bifrost/plugins/telemetry"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/maximhq/bifrost/transports/bifrost-http/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -268,39 +268,6 @@ func uiHandler(ctx *fasthttp.RequestCtx) {
 // - Linux/macOS: ~/.config/bifrost
 // - Windows: %APPDATA%\bifrost
 // - If appDir is provided (non-empty), it returns that instead
-func getDefaultConfigDir(appDir string) string {
-	// If appDir is provided, use it directly
-	if appDir != "" && appDir != "./bifrost-data" {
-		return appDir
-	}
-
-	// Get OS-specific config directory
-	var configDir string
-	switch runtime.GOOS {
-	case "windows":
-		// Windows: %APPDATA%\bifrost
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			configDir = filepath.Join(appData, "bifrost")
-		} else {
-			// Fallback to user home directory
-			if homeDir, err := os.UserHomeDir(); err == nil {
-				configDir = filepath.Join(homeDir, "AppData", "Roaming", "bifrost")
-			}
-		}
-	default:
-		// Linux, macOS and other Unix-like systems: ~/.config/bifrost
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			configDir = filepath.Join(homeDir, ".config", "bifrost")
-		}
-	}
-
-	// If we couldn't determine the config directory, fall back to current directory
-	if configDir == "" {
-		configDir = "./bifrost-data"
-	}
-
-	return configDir
-}
 
 // main is the entry point of the application.
 // It:
@@ -316,7 +283,7 @@ func getDefaultConfigDir(appDir string) string {
 //   - GET /metrics: For Prometheus metrics
 func main() {
 	ctx := context.Background()
-	configDir := getDefaultConfigDir(appDir)
+	configDir := utils.GetDefaultConfigDir(appDir)
 	// Ensure app directory exists
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		logger.Fatal("failed to create app directory %s: %v", configDir, err)
