@@ -25,10 +25,6 @@ const defaultConfig: CoreConfig = {
   enforce_governance_header: false,
   allow_direct_keys: false,
   allowed_origins: [],
-  db: {
-    type: "sqlite",
-    config: { path: "./bifrost.db" }
-  },
   config_store: {
     type: "sqlite",
     config: { path: "./bifrost.db" }

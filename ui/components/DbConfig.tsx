@@ -76,6 +76,7 @@ const DbConfigCard = () => {
           user: pgConfig.user,
           password: pgConfig.password,
           database: pgConfig.dbname,
+          sslMode:pgConfig.sslmode
         },
       };
 
@@ -83,7 +84,7 @@ const DbConfigCard = () => {
 
       const payload: CoreConfig = {
         ...data!.client_config,
-        db: dbConfig,
+        config_store: dbConfig,
       };
 
       await updateCoreConfig(payload).unwrap();

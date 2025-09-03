@@ -153,6 +153,7 @@ export interface PostgresConfig {
 		user: string;
 		password: string;
 		database: string;
+		sslMode:string
 	};
 }
 // Union type
@@ -190,7 +191,6 @@ export interface CoreConfig {
 	enforce_governance_header: boolean;
 	allow_direct_keys: boolean;
 	allowed_origins: string[];
-	db: DatabaseConfig;
 	config_store: DatabaseConfig
 }
 
