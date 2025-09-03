@@ -56,6 +56,7 @@ func (h *ConfigHandler) GetConfig(ctx *fasthttp.RequestCtx) {
 		}
 		if cc != nil {
 			mapConfig["client_config"] = *cc
+			h.logger.Info("cc type: %T", *cc)
 		}
 	} else {
 		mapConfig["client_config"] = h.store.ClientConfig
@@ -64,6 +65,7 @@ func (h *ConfigHandler) GetConfig(ctx *fasthttp.RequestCtx) {
 	mapConfig["is_db_connected"] = h.store.ConfigStore != nil
 	mapConfig["is_cache_connected"] = h.store.VectorStore != nil
 	mapConfig["is_logs_connected"] = h.store.LogsStore != nil
+	h.logger.Info("Final ClientConfig: %+v", mapConfig)
 
 	SendJSON(ctx, mapConfig, h.logger)
 }

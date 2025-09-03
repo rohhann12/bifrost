@@ -16,9 +16,9 @@ const (
 
 // Config represents the configuration for the config store.
 type Config struct {
-	Enabled bool            `json:"enabled"` 
-	Type    ConfigStoreType `json:"type"`    
-	Config  any             `json:"config"`  
+	Enabled bool            `json:"enabled"`
+	Type    ConfigStoreType `json:"type"`
+	Config  any             `json:"config"`
 }
 
 // SQLiteConfig represents configuration for SQLite.
@@ -28,11 +28,12 @@ type SQLiteConfig struct {
 
 // PostgresConfig represents configuration for Postgres.
 type PostgresConfig struct {
-	Host     string `json:"host"`     
-	Port     int    `json:"port"`     
-	User     string `json:"user"`     
-	Password string `json:"password"` 
-	DBName   string `json:"dbName"`   
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+	DBName   string `json:"dbName"`
+	SSLMode  string `json:"sslMode"`
 }
 
 // UnmarshalJSON unmarshals the config from JSON.

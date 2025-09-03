@@ -5,36 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/logstore"
 	"github.com/maximhq/bifrost/framework/vectorstore"
-	"gorm.io/driver/sqlite"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 )
-
-// SQLiteConfig represents the configuration for a SQLite database.
-type SQLiteConfig struct {
-	Path string `json:"path"`
-}
 
 // DbConfigStore represents a configuration store that uses a SQLite database.
 type DbConfigStore struct {
 	db     *gorm.DB
 	logger schemas.Logger
-}
-
-// PostgresConfig represents the configuration for a Postgres database.
-type PostgresConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	DBName   string `json:"dbName"`
-	SSLMode  string `json:"sslMode"` // e.g., "disable", "require"
 }
 
 // UpdateClientConfig updates the client configuration in the database.
@@ -63,9 +49,39 @@ func (s *DbConfigStore) GetClientConfig() (*ClientConfig, error) {
 	var dbConfig TableClientConfig
 	if err := s.db.First(&dbConfig).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			// still build ClientConfig with defaults
+			return &ClientConfig{
+				DbDetails: Config{
+					Enabled: true,
+					Type:    "sqlite",
+					Config:  "config.db",
+				},
+			}, nil
 		}
 		return nil, err
+	}
+	// not sure if we should pass this here
+	configPath := filepath.Join("./bifrost", "config.json")
+
+	var dbDetails Config
+	if _, err := os.Stat(configPath); err == nil {
+		// config.json exists -> load content
+		data, readErr := os.ReadFile(configPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("failed to read config.json: %w", readErr)
+		}
+		if unmarshalErr := json.Unmarshal(data, &dbDetails); unmarshalErr != nil {
+			return nil, fmt.Errorf("failed to parse config.json: %w", unmarshalErr)
+		}
+	} else if os.IsNotExist(err) {
+		// fallback -> sqlite default
+		dbDetails = Config{
+			Enabled: true,
+			Type:    "sqlite",
+			Config:  "./config.db",
+		}
+	} else {
+		return nil, fmt.Errorf("error checking config.json: %w", err)
 	}
 	return &ClientConfig{
 		DropExcessRequests:      dbConfig.DropExcessRequests,
@@ -76,6 +92,7 @@ func (s *DbConfigStore) GetClientConfig() (*ClientConfig, error) {
 		EnforceGovernanceHeader: dbConfig.EnforceGovernanceHeader,
 		AllowDirectKeys:         dbConfig.AllowDirectKeys,
 		AllowedOrigins:          dbConfig.AllowedOrigins,
+		DbDetails:               dbDetails,
 	}, nil
 }
 
@@ -89,6 +106,14 @@ func (s *DbConfigStore) UpdateProvidersConfig(providers map[schemas.ModelProvide
 			}
 			return err
 		}
+		// ab ismei jo data udhr se ara h agr request ari h mtlb toggle toh kra h
+		// toh bss simply high level config.json banado
+		// usmei niche wale type ka data daldo
+		// 		type Config struct {
+		// 	Enabled bool            `json:"enabled"`
+		// 	Type    ConfigStoreType `json:"type"`
+		// 	Config  any             `json:"config"`
+		// }
 
 		for providerName, providerConfig := range providers {
 			dbProvider := TableProvider{
@@ -951,6 +976,7 @@ func newSqliteConfigStore(config *SQLiteConfig, logger schemas.Logger) (ConfigSt
 	}
 	return s, nil
 }
+
 // newPostgresConfigStore creates a new Postgres config store.
 func newPostgresConfigStore(config *PostgresConfig, logger schemas.Logger) (ConfigStore, error) {
 	if config.SSLMode == "" {
@@ -975,7 +1001,7 @@ func newPostgresConfigStore(config *PostgresConfig, logger schemas.Logger) (Conf
 	}
 	s := &DbConfigStore{db: db, logger: logger}
 	if err := removeDuplicateKeysAndNullKeysPostgres(s); err != nil {
-    	return nil, fmt.Errorf("failed to clean duplicate keys: %w", err)
+		return nil, fmt.Errorf("failed to clean duplicate keys: %w", err)
 	}
 	logger.Debug("running migration on Postgres DB")
 	if err := db.AutoMigrate(
@@ -1052,4 +1078,3 @@ func removeDuplicateKeysAndNullKeysPostgres(s *DbConfigStore) error {
 	s.logger.Debug("Postgres migration complete")
 	return nil
 }
-

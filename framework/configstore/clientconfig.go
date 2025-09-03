@@ -33,7 +33,8 @@ type ClientConfig struct {
 	EnableGovernance        bool     `json:"enable_governance"`         // Enable governance on all requests
 	EnforceGovernanceHeader bool     `json:"enforce_governance_header"` // Enforce governance on all requests
 	AllowDirectKeys         bool     `json:"allow_direct_keys"`         // Allow direct keys to be used for requests
-	AllowedOrigins          []string `json:"allowed_origins,omitempty"` // Additional allowed origins for CORS and WebSocket (localhost is always allowed)
+	AllowedOrigins          []string `json:"allowed_origins,omitempty"` // Additional allowed origins 	for CORS and WebSocket (localhost is always allowed)
+	DbDetails               Config   `json:"db_details"`
 }
 
 // ProviderConfig represents the configuration for a specific AI model provider.
