@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/fasthttp/router"
 	bifrost "github.com/maximhq/bifrost/core"
@@ -26,124 +27,95 @@ func NewDbHandler(client *bifrost.Bifrost, logger schemas.Logger, store *lib.Con
 		store:  store,
 	}
 }
+
 func (h *DbHandler) RegisterRoutes(r *router.Router) {
 	r.GET("/api/db", h.GetDbState)
 	r.POST("/api/db", h.UpdateDbState)
 }
 
-// Get current state of the DbType - by default we check config.json.
-// If that exists, return the parsed config. Otherwise return the response from last configuration done as the user can change path
-// for sqlite as well it is not that everyimt it will have
-// config.db
+// GetDbState returns the current database configuration from memory
+// Following TODO: If config.json doesn't exist, show SQLite config from memory
 func (h *DbHandler) GetDbState(ctx *fasthttp.RequestCtx) {
-	configPath := "config.json"
-	var cfg configstore.Config
+	configPath := filepath.Join(filepath.Dir(h.store.ConfigPath), "config.json")
 
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		ctx.Response.Header.Set("Content-Type", "application/json")
-		_ = json.NewEncoder(ctx).Encode(map[string]string{
-			"db_type": "sqlite", // fallback default
-			"path":    string(cfg.Type),
-		})
-		h.logger.Info(fmt.Sprintf("cfg.Type: %s", cfg.Type))
-
-		cfgJson, _ := json.Marshal(cfg.Config)
-		h.logger.Info(fmt.Sprintf("cfg.Config: %s", string(cfgJson)))
-
-		h.logger.Info(fmt.Sprintf("cfg.Enabled: %v", cfg.Enabled))
-		return
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		ctx.SetStatusCode(500)
-		ctx.SetBody([]byte(`{"error":"failed to read config.json"}`))
-		return
-	}
-
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		ctx.SetStatusCode(500)
-		ctx.SetBody([]byte(`{"error":"invalid config.json"}`))
-		return
-	}
-
-	var resp map[string]any
-	switch cfg.Type {
-	case configstore.ConfigStoreTypeSQLite:
-		sqliteCfg, ok := cfg.Config.(map[string]any)
-		if !ok {
-			ctx.SetStatusCode(500)
-			ctx.SetBody([]byte(`{"error":"invalid sqlite config"}`))
-
-			h.logger.Info("hitting this")
+	// Check if config.json exists
+	if _, err := os.Stat(configPath); err == nil {
+		// config.json exists - read from file
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			SendError(ctx, fasthttp.StatusInternalServerError,
+				fmt.Sprintf("failed to read config.json: %v", err), h.logger)
 			return
 		}
-		resp = map[string]any{
-			"db_type": "sqlite",
-			"path":    sqliteCfg["path"],
-		}
 
-	case configstore.ConfigStoreTypePostgres:
-		pgCfg, ok := cfg.Config.(map[string]any)
-		if !ok {
-			ctx.SetStatusCode(500)
-			ctx.SetBody([]byte(`{"error":"invalid postgres config"}`))
+		var configData lib.ConfigData
+		if err := json.Unmarshal(data, &configData); err != nil {
+			SendError(ctx, fasthttp.StatusInternalServerError,
+				fmt.Sprintf("failed to parse config.json: %v", err), h.logger)
 			return
 		}
-		resp = map[string]any{
-			"db_type":  "postgres",
-			"host":     pgCfg["host"],
-			"port":     pgCfg["port"],
-			"user":     pgCfg["user"],
-			"dbname":   pgCfg["dbName"],
-			"ssl_mode": pgCfg["sslMode"],
-		}
 
-	default:
-		resp = map[string]any{"db_type": "unknown"}
+		// Return config store config from file
+		if configData.ConfigStoreConfig != nil {
+			SendJSON(ctx, map[string]any{
+				"enabled": configData.ConfigStoreConfig.Enabled,
+				"type":    string(configData.ConfigStoreConfig.Type),
+				"config":  configData.ConfigStoreConfig.Config,
+			}, h.logger)
+			return
+		}
 	}
 
-	ctx.Response.Header.Set("Content-Type", "application/json")
-	_ = json.NewEncoder(ctx).Encode(resp)
+	// No config.json exists - return SQLite config from memory (default)
+	SendJSON(ctx, map[string]any{
+		"enabled": true,
+		"type":    "sqlite",
+		"config": map[string]any{
+			"path": h.store.ConfigPath,
+		},
+	}, h.logger)
 }
 
+// UpdateDbState creates or updates config.json with the provided Config struct
 func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
-	configPath := "config.json"
+	configPath := filepath.Join(filepath.Dir(h.store.ConfigPath), "config.json")
 
-	// expected input: { "db_type": "postgres" }
-	var body struct {
-		DbType string `json:"db_type"`
-	}
-	if err := json.Unmarshal(ctx.PostBody(), &body); err != nil {
-		ctx.SetStatusCode(400)
-		ctx.SetBody([]byte(`{"error":"invalid request body"}`))
+	// Parse the Config struct from request body
+	var configStoreConfig configstore.Config
+	if err := json.Unmarshal(ctx.PostBody(), &configStoreConfig); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest,
+			fmt.Sprintf("invalid config format: %v", err), h.logger)
 		return
 	}
 
-	// load existing config if present
-	var cfg lib.Config
+	// Load existing config.json if it exists
+	var configData lib.ConfigData
 	if _, err := os.Stat(configPath); err == nil {
 		if data, err := os.ReadFile(configPath); err == nil {
-			_ = json.Unmarshal(data, &cfg) // best effort
+			_ = json.Unmarshal(data, &configData) // best effort
 		}
 	}
 
-	// update only DbType
-	cfg.DbType = body.DbType
+	// Update the config store config
+	configData.ConfigStoreConfig = &configStoreConfig
 
-	// write back to file
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	// Write back to config.json
+	data, err := json.MarshalIndent(configData, "", "  ")
 	if err != nil {
-		ctx.SetStatusCode(500)
-		ctx.SetBody([]byte(`{"error":"failed to encode config"}`))
-		return
-	}
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
-		ctx.SetStatusCode(500)
-		ctx.SetBody([]byte(`{"error":"failed to write config.json"}`))
+		SendError(ctx, fasthttp.StatusInternalServerError,
+			"failed to encode config", h.logger)
 		return
 	}
 
-	ctx.Response.Header.Set("Content-Type", "application/json")
-	_ = json.NewEncoder(ctx).Encode(map[string]string{"db_type": cfg.DbType})
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError,
+			"failed to write config.json", h.logger)
+		return
+	}
+
+	SendJSON(ctx, map[string]any{
+		"status":  "success",
+		"message": "config.json updated successfully",
+		"config":  configStoreConfig,
+	}, h.logger)
 }
