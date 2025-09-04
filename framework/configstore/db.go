@@ -10,24 +10,20 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/logstore"
 	"github.com/maximhq/bifrost/framework/vectorstore"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 )
 
-// SQLiteConfig represents the configuration for a SQLite database.
-type SQLiteConfig struct {
-	Path string `json:"path"`
-}
-
-// SQLiteConfigStore represents a configuration store that uses a SQLite database.
-type SQLiteConfigStore struct {
+// DbConfigStore represents a configuration store that uses a SQLite database.
+type DbConfigStore struct {
 	db     *gorm.DB
 	logger schemas.Logger
 }
 
 // UpdateClientConfig updates the client configuration in the database.
-func (s *SQLiteConfigStore) UpdateClientConfig(config *ClientConfig) error {
+func (s *DbConfigStore) UpdateClientConfig(config *ClientConfig) error {
 	dbConfig := TableClientConfig{
 		DropExcessRequests:      config.DropExcessRequests,
 		InitialPoolSize:         config.InitialPoolSize,
@@ -48,7 +44,7 @@ func (s *SQLiteConfigStore) UpdateClientConfig(config *ClientConfig) error {
 }
 
 // GetClientConfig retrieves the client configuration from the database.
-func (s *SQLiteConfigStore) GetClientConfig() (*ClientConfig, error) {
+func (s *DbConfigStore) GetClientConfig() (*ClientConfig, error) {
 	var dbConfig TableClientConfig
 	if err := s.db.First(&dbConfig).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -69,7 +65,7 @@ func (s *SQLiteConfigStore) GetClientConfig() (*ClientConfig, error) {
 }
 
 // UpdateProvidersConfig updates the client configuration in the database.
-func (s *SQLiteConfigStore) UpdateProvidersConfig(providers map[schemas.ModelProvider]ProviderConfig) error {
+func (s *DbConfigStore) UpdateProvidersConfig(providers map[schemas.ModelProvider]ProviderConfig) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		// Delete all existing providers (cascades to keys)
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TableProvider{}).Error; err != nil {
@@ -162,7 +158,7 @@ func (s *SQLiteConfigStore) UpdateProvidersConfig(providers map[schemas.ModelPro
 }
 
 // GetProvidersConfig retrieves the provider configuration from the database.
-func (s *SQLiteConfigStore) GetProvidersConfig() (map[schemas.ModelProvider]ProviderConfig, error) {
+func (s *DbConfigStore) GetProvidersConfig() (map[schemas.ModelProvider]ProviderConfig, error) {
 	var dbProviders []TableProvider
 	if err := s.db.Preload("Keys").Find(&dbProviders).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -204,7 +200,7 @@ func (s *SQLiteConfigStore) GetProvidersConfig() (map[schemas.ModelProvider]Prov
 }
 
 // GetMCPConfig retrieves the MCP configuration from the database.
-func (s *SQLiteConfigStore) GetMCPConfig() (*schemas.MCPConfig, error) {
+func (s *DbConfigStore) GetMCPConfig() (*schemas.MCPConfig, error) {
 	var dbMCPClients []TableMCPClient
 	if err := s.db.Find(&dbMCPClients).Error; err != nil {
 		return nil, err
@@ -229,7 +225,7 @@ func (s *SQLiteConfigStore) GetMCPConfig() (*schemas.MCPConfig, error) {
 }
 
 // UpdateMCPConfig updates the MCP configuration in the database.
-func (s *SQLiteConfigStore) UpdateMCPConfig(config *schemas.MCPConfig) error {
+func (s *DbConfigStore) UpdateMCPConfig(config *schemas.MCPConfig) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		// Removing existing MCP clients
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TableMCPClient{}).Error; err != nil {
@@ -265,7 +261,7 @@ func (s *SQLiteConfigStore) UpdateMCPConfig(config *schemas.MCPConfig) error {
 }
 
 // GetVectorStoreConfig retrieves the vector store configuration from the database.
-func (s *SQLiteConfigStore) GetVectorStoreConfig() (*vectorstore.Config, error) {
+func (s *DbConfigStore) GetVectorStoreConfig() (*vectorstore.Config, error) {
 	var vectorStoreTableConfig TableVectorStoreConfig
 	if err := s.db.First(&vectorStoreTableConfig).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -282,7 +278,7 @@ func (s *SQLiteConfigStore) GetVectorStoreConfig() (*vectorstore.Config, error) 
 }
 
 // UpdateVectorStoreConfig updates the vector store configuration in the database.
-func (s *SQLiteConfigStore) UpdateVectorStoreConfig(config *vectorstore.Config) error {
+func (s *DbConfigStore) UpdateVectorStoreConfig(config *vectorstore.Config) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		// Delete existing cache config
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TableVectorStoreConfig{}).Error; err != nil {
@@ -303,7 +299,7 @@ func (s *SQLiteConfigStore) UpdateVectorStoreConfig(config *vectorstore.Config) 
 }
 
 // GetLogsStoreConfig retrieves the logs store configuration from the database.
-func (s *SQLiteConfigStore) GetLogsStoreConfig() (*logstore.Config, error) {
+func (s *DbConfigStore) GetLogsStoreConfig() (*logstore.Config, error) {
 	var dbConfig TableLogStoreConfig
 	if err := s.db.First(&dbConfig).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -322,7 +318,7 @@ func (s *SQLiteConfigStore) GetLogsStoreConfig() (*logstore.Config, error) {
 }
 
 // UpdateLogsStoreConfig updates the logs store configuration in the database.
-func (s *SQLiteConfigStore) UpdateLogsStoreConfig(config *logstore.Config) error {
+func (s *DbConfigStore) UpdateLogsStoreConfig(config *logstore.Config) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TableLogStoreConfig{}).Error; err != nil {
 			return err
@@ -341,7 +337,7 @@ func (s *SQLiteConfigStore) UpdateLogsStoreConfig(config *logstore.Config) error
 }
 
 // GetEnvKeys retrieves the environment keys from the database.
-func (s *SQLiteConfigStore) GetEnvKeys() (map[string][]EnvKeyInfo, error) {
+func (s *DbConfigStore) GetEnvKeys() (map[string][]EnvKeyInfo, error) {
 	var dbEnvKeys []TableEnvKey
 	if err := s.db.Find(&dbEnvKeys).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -363,7 +359,7 @@ func (s *SQLiteConfigStore) GetEnvKeys() (map[string][]EnvKeyInfo, error) {
 }
 
 // UpdateEnvKeys updates the environment keys in the database.
-func (s *SQLiteConfigStore) UpdateEnvKeys(keys map[string][]EnvKeyInfo) error {
+func (s *DbConfigStore) UpdateEnvKeys(keys map[string][]EnvKeyInfo) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		// Delete existing env keys
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TableEnvKey{}).Error; err != nil {
@@ -392,7 +388,7 @@ func (s *SQLiteConfigStore) UpdateEnvKeys(keys map[string][]EnvKeyInfo) error {
 }
 
 // GetConfig retrieves a specific config from the database.
-func (s *SQLiteConfigStore) GetConfig(key string) (*TableConfig, error) {
+func (s *DbConfigStore) GetConfig(key string) (*TableConfig, error) {
 	var config TableConfig
 	if err := s.db.First(&config, "key = ?", key).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -404,7 +400,7 @@ func (s *SQLiteConfigStore) GetConfig(key string) (*TableConfig, error) {
 }
 
 // UpdateConfig updates a specific config in the database.
-func (s *SQLiteConfigStore) UpdateConfig(config *TableConfig, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateConfig(config *TableConfig, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -415,7 +411,7 @@ func (s *SQLiteConfigStore) UpdateConfig(config *TableConfig, tx ...*gorm.DB) er
 }
 
 // GetModelPrices retrieves all model pricing records from the database.
-func (s *SQLiteConfigStore) GetModelPrices() ([]TableModelPricing, error) {
+func (s *DbConfigStore) GetModelPrices() ([]TableModelPricing, error) {
 	var modelPrices []TableModelPricing
 	if err := s.db.Find(&modelPrices).Error; err != nil {
 		return nil, err
@@ -424,7 +420,7 @@ func (s *SQLiteConfigStore) GetModelPrices() ([]TableModelPricing, error) {
 }
 
 // CreateModelPrices creates a new model pricing record in the database.
-func (s *SQLiteConfigStore) CreateModelPrices(pricing *TableModelPricing, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreateModelPrices(pricing *TableModelPricing, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -435,7 +431,7 @@ func (s *SQLiteConfigStore) CreateModelPrices(pricing *TableModelPricing, tx ...
 }
 
 // DeleteModelPrices deletes all model pricing records from the database.
-func (s *SQLiteConfigStore) DeleteModelPrices(tx ...*gorm.DB) error {
+func (s *DbConfigStore) DeleteModelPrices(tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -447,7 +443,7 @@ func (s *SQLiteConfigStore) DeleteModelPrices(tx ...*gorm.DB) error {
 
 // PLUGINS METHODS
 
-func (s *SQLiteConfigStore) GetPlugins() ([]TablePlugin, error) {
+func (s *DbConfigStore) GetPlugins() ([]TablePlugin, error) {
 	var plugins []TablePlugin
 	if err := s.db.Find(&plugins).Error; err != nil {
 		return nil, err
@@ -455,7 +451,7 @@ func (s *SQLiteConfigStore) GetPlugins() ([]TablePlugin, error) {
 	return plugins, nil
 }
 
-func (s *SQLiteConfigStore) GetPlugin(name string) (*TablePlugin, error) {
+func (s *DbConfigStore) GetPlugin(name string) (*TablePlugin, error) {
 	var plugin TablePlugin
 	if err := s.db.First(&plugin, "name = ?", name).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -466,7 +462,7 @@ func (s *SQLiteConfigStore) GetPlugin(name string) (*TablePlugin, error) {
 	return &plugin, nil
 }
 
-func (s *SQLiteConfigStore) CreatePlugin(plugin *TablePlugin, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreatePlugin(plugin *TablePlugin, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -476,7 +472,7 @@ func (s *SQLiteConfigStore) CreatePlugin(plugin *TablePlugin, tx ...*gorm.DB) er
 	return txDB.Create(plugin).Error
 }
 
-func (s *SQLiteConfigStore) UpdatePlugin(plugin *TablePlugin, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdatePlugin(plugin *TablePlugin, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	var localTx bool
 
@@ -509,7 +505,7 @@ func (s *SQLiteConfigStore) UpdatePlugin(plugin *TablePlugin, tx ...*gorm.DB) er
 	return nil
 }
 
-func (s *SQLiteConfigStore) DeletePlugin(name string, tx ...*gorm.DB) error {
+func (s *DbConfigStore) DeletePlugin(name string, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -522,7 +518,7 @@ func (s *SQLiteConfigStore) DeletePlugin(name string, tx ...*gorm.DB) error {
 // GOVERNANCE METHODS
 
 // GetVirtualKeys retrieves all virtual keys from the database.
-func (s *SQLiteConfigStore) GetVirtualKeys() ([]TableVirtualKey, error) {
+func (s *DbConfigStore) GetVirtualKeys() ([]TableVirtualKey, error) {
 	var virtualKeys []TableVirtualKey
 
 	// Preload all relationships for complete information
@@ -540,7 +536,7 @@ func (s *SQLiteConfigStore) GetVirtualKeys() ([]TableVirtualKey, error) {
 }
 
 // GetVirtualKey retrieves a virtual key from the database.
-func (s *SQLiteConfigStore) GetVirtualKey(id string) (*TableVirtualKey, error) {
+func (s *DbConfigStore) GetVirtualKey(id string) (*TableVirtualKey, error) {
 	var virtualKey TableVirtualKey
 	if err := s.db.Preload("Team").
 		Preload("Customer").
@@ -554,7 +550,7 @@ func (s *SQLiteConfigStore) GetVirtualKey(id string) (*TableVirtualKey, error) {
 	return &virtualKey, nil
 }
 
-func (s *SQLiteConfigStore) CreateVirtualKey(virtualKey *TableVirtualKey, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreateVirtualKey(virtualKey *TableVirtualKey, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -577,7 +573,7 @@ func (s *SQLiteConfigStore) CreateVirtualKey(virtualKey *TableVirtualKey, tx ...
 	return nil
 }
 
-func (s *SQLiteConfigStore) UpdateVirtualKey(virtualKey *TableVirtualKey, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateVirtualKey(virtualKey *TableVirtualKey, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -609,7 +605,7 @@ func (s *SQLiteConfigStore) UpdateVirtualKey(virtualKey *TableVirtualKey, tx ...
 }
 
 // GetKeysByIDs retrieves multiple keys by their IDs
-func (s *SQLiteConfigStore) GetKeysByIDs(ids []string) ([]TableKey, error) {
+func (s *DbConfigStore) GetKeysByIDs(ids []string) ([]TableKey, error) {
 	if len(ids) == 0 {
 		return []TableKey{}, nil
 	}
@@ -622,12 +618,12 @@ func (s *SQLiteConfigStore) GetKeysByIDs(ids []string) ([]TableKey, error) {
 }
 
 // DeleteVirtualKey deletes a virtual key from the database.
-func (s *SQLiteConfigStore) DeleteVirtualKey(id string) error {
+func (s *DbConfigStore) DeleteVirtualKey(id string) error {
 	return s.db.Delete(&TableVirtualKey{}, "id = ?", id).Error
 }
 
 // GetTeams retrieves all teams from the database.
-func (s *SQLiteConfigStore) GetTeams(customerID string) ([]TableTeam, error) {
+func (s *DbConfigStore) GetTeams(customerID string) ([]TableTeam, error) {
 	// Preload relationships for complete information
 	query := s.db.Preload("Customer").Preload("Budget")
 
@@ -644,7 +640,7 @@ func (s *SQLiteConfigStore) GetTeams(customerID string) ([]TableTeam, error) {
 }
 
 // GetTeam retrieves a specific team from the database.
-func (s *SQLiteConfigStore) GetTeam(id string) (*TableTeam, error) {
+func (s *DbConfigStore) GetTeam(id string) (*TableTeam, error) {
 	var team TableTeam
 	if err := s.db.Preload("Customer").Preload("Budget").First(&team, "id = ?", id).Error; err != nil {
 		return nil, err
@@ -653,7 +649,7 @@ func (s *SQLiteConfigStore) GetTeam(id string) (*TableTeam, error) {
 }
 
 // CreateTeam creates a new team in the database.
-func (s *SQLiteConfigStore) CreateTeam(team *TableTeam, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreateTeam(team *TableTeam, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -664,7 +660,7 @@ func (s *SQLiteConfigStore) CreateTeam(team *TableTeam, tx ...*gorm.DB) error {
 }
 
 // UpdateTeam updates an existing team in the database.
-func (s *SQLiteConfigStore) UpdateTeam(team *TableTeam, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateTeam(team *TableTeam, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -675,12 +671,12 @@ func (s *SQLiteConfigStore) UpdateTeam(team *TableTeam, tx ...*gorm.DB) error {
 }
 
 // DeleteTeam deletes a team from the database.
-func (s *SQLiteConfigStore) DeleteTeam(id string) error {
+func (s *DbConfigStore) DeleteTeam(id string) error {
 	return s.db.Delete(&TableTeam{}, "id = ?", id).Error
 }
 
 // GetCustomers retrieves all customers from the database.
-func (s *SQLiteConfigStore) GetCustomers() ([]TableCustomer, error) {
+func (s *DbConfigStore) GetCustomers() ([]TableCustomer, error) {
 	var customers []TableCustomer
 	if err := s.db.Preload("Teams").Preload("Budget").Find(&customers).Error; err != nil {
 		return nil, err
@@ -689,7 +685,7 @@ func (s *SQLiteConfigStore) GetCustomers() ([]TableCustomer, error) {
 }
 
 // GetCustomer retrieves a specific customer from the database.
-func (s *SQLiteConfigStore) GetCustomer(id string) (*TableCustomer, error) {
+func (s *DbConfigStore) GetCustomer(id string) (*TableCustomer, error) {
 	var customer TableCustomer
 	if err := s.db.Preload("Teams").Preload("Budget").First(&customer, "id = ?", id).Error; err != nil {
 		return nil, err
@@ -698,7 +694,7 @@ func (s *SQLiteConfigStore) GetCustomer(id string) (*TableCustomer, error) {
 }
 
 // CreateCustomer creates a new customer in the database.
-func (s *SQLiteConfigStore) CreateCustomer(customer *TableCustomer, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreateCustomer(customer *TableCustomer, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -709,7 +705,7 @@ func (s *SQLiteConfigStore) CreateCustomer(customer *TableCustomer, tx ...*gorm.
 }
 
 // UpdateCustomer updates an existing customer in the database.
-func (s *SQLiteConfigStore) UpdateCustomer(customer *TableCustomer, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateCustomer(customer *TableCustomer, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -720,12 +716,12 @@ func (s *SQLiteConfigStore) UpdateCustomer(customer *TableCustomer, tx ...*gorm.
 }
 
 // DeleteCustomer deletes a customer from the database.
-func (s *SQLiteConfigStore) DeleteCustomer(id string) error {
+func (s *DbConfigStore) DeleteCustomer(id string) error {
 	return s.db.Delete(&TableCustomer{}, "id = ?", id).Error
 }
 
 // GetRateLimit retrieves a specific rate limit from the database.
-func (s *SQLiteConfigStore) GetRateLimit(id string) (*TableRateLimit, error) {
+func (s *DbConfigStore) GetRateLimit(id string) (*TableRateLimit, error) {
 	var rateLimit TableRateLimit
 	if err := s.db.First(&rateLimit, "id = ?", id).Error; err != nil {
 		return nil, err
@@ -734,7 +730,7 @@ func (s *SQLiteConfigStore) GetRateLimit(id string) (*TableRateLimit, error) {
 }
 
 // CreateRateLimit creates a new rate limit in the database.
-func (s *SQLiteConfigStore) CreateRateLimit(rateLimit *TableRateLimit, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreateRateLimit(rateLimit *TableRateLimit, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -745,7 +741,7 @@ func (s *SQLiteConfigStore) CreateRateLimit(rateLimit *TableRateLimit, tx ...*go
 }
 
 // UpdateRateLimit updates a rate limit in the database.
-func (s *SQLiteConfigStore) UpdateRateLimit(rateLimit *TableRateLimit, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateRateLimit(rateLimit *TableRateLimit, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -756,7 +752,7 @@ func (s *SQLiteConfigStore) UpdateRateLimit(rateLimit *TableRateLimit, tx ...*go
 }
 
 // UpdateRateLimits updates multiple rate limits in the database.
-func (s *SQLiteConfigStore) UpdateRateLimits(rateLimits []*TableRateLimit, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateRateLimits(rateLimits []*TableRateLimit, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -772,7 +768,7 @@ func (s *SQLiteConfigStore) UpdateRateLimits(rateLimits []*TableRateLimit, tx ..
 }
 
 // GetBudgets retrieves all budgets from the database.
-func (s *SQLiteConfigStore) GetBudgets() ([]TableBudget, error) {
+func (s *DbConfigStore) GetBudgets() ([]TableBudget, error) {
 	var budgets []TableBudget
 	if err := s.db.Find(&budgets).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -784,7 +780,7 @@ func (s *SQLiteConfigStore) GetBudgets() ([]TableBudget, error) {
 }
 
 // GetBudget retrieves a specific budget from the database.
-func (s *SQLiteConfigStore) GetBudget(id string, tx ...*gorm.DB) (*TableBudget, error) {
+func (s *DbConfigStore) GetBudget(id string, tx ...*gorm.DB) (*TableBudget, error) {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -802,7 +798,7 @@ func (s *SQLiteConfigStore) GetBudget(id string, tx ...*gorm.DB) (*TableBudget, 
 }
 
 // CreateBudget creates a new budget in the database.
-func (s *SQLiteConfigStore) CreateBudget(budget *TableBudget, tx ...*gorm.DB) error {
+func (s *DbConfigStore) CreateBudget(budget *TableBudget, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -813,7 +809,7 @@ func (s *SQLiteConfigStore) CreateBudget(budget *TableBudget, tx ...*gorm.DB) er
 }
 
 // UpdateBudgets updates multiple budgets in the database.
-func (s *SQLiteConfigStore) UpdateBudgets(budgets []*TableBudget, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateBudgets(budgets []*TableBudget, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -830,7 +826,7 @@ func (s *SQLiteConfigStore) UpdateBudgets(budgets []*TableBudget, tx ...*gorm.DB
 }
 
 // UpdateBudget updates a budget in the database.
-func (s *SQLiteConfigStore) UpdateBudget(budget *TableBudget, tx ...*gorm.DB) error {
+func (s *DbConfigStore) UpdateBudget(budget *TableBudget, tx ...*gorm.DB) error {
 	var txDB *gorm.DB
 	if len(tx) > 0 {
 		txDB = tx[0]
@@ -841,11 +837,11 @@ func (s *SQLiteConfigStore) UpdateBudget(budget *TableBudget, tx ...*gorm.DB) er
 }
 
 // ExecuteTransaction executes a transaction.
-func (s *SQLiteConfigStore) ExecuteTransaction(fn func(tx *gorm.DB) error) error {
+func (s *DbConfigStore) ExecuteTransaction(fn func(tx *gorm.DB) error) error {
 	return s.db.Transaction(fn)
 }
 
-func (s *SQLiteConfigStore) doesTableExist(tableName string) bool {
+func (s *DbConfigStore) doesTableExist(tableName string) bool {
 	var count int64
 	if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", tableName).Scan(&count).Error; err != nil {
 		return false
@@ -854,13 +850,13 @@ func (s *SQLiteConfigStore) doesTableExist(tableName string) bool {
 }
 
 // removeNullKeys removes null keys from the database.
-func (s *SQLiteConfigStore) removeNullKeys() error {
+func (s *DbConfigStore) removeNullKeys() error {
 	return s.db.Exec("DELETE FROM config_keys WHERE key_id IS NULL OR value IS NULL").Error
 }
 
 // removeDuplicateKeysAndNullKeys removes duplicate keys based on key_id and value combination
 // Keeps the record with the smallest ID (oldest record) and deletes duplicates
-func (s *SQLiteConfigStore) removeDuplicateKeysAndNullKeys() error {
+func (s *DbConfigStore) removeDuplicateKeysAndNullKeys() error {
 	s.logger.Debug("removing duplicate keys and null keys from the database")
 	// Check if the config_keys table exists first
 	if !s.doesTableExist("config_keys") {
@@ -910,7 +906,7 @@ func newSqliteConfigStore(config *SQLiteConfig, logger schemas.Logger) (ConfigSt
 		return nil, err
 	}
 	logger.Debug("db opened for configstore")
-	s := &SQLiteConfigStore{db: db, logger: logger}
+	s := &DbConfigStore{db: db, logger: logger}
 	logger.Debug("running migration to remove duplicate keys")
 	// Run migration to remove duplicate keys before AutoMigrate
 	if err := s.removeDuplicateKeysAndNullKeys(); err != nil {
@@ -939,4 +935,106 @@ func newSqliteConfigStore(config *SQLiteConfig, logger schemas.Logger) (ConfigSt
 		return nil, err
 	}
 	return s, nil
+}
+
+// newPostgresConfigStore creates a new Postgres config store.
+func newPostgresConfigStore(config *PostgresConfig, logger schemas.Logger) (ConfigStore, error) {
+	if config.SSLMode == "" {
+		config.SSLMode = "disable"
+	}
+
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		config.Host,
+		config.Port,
+		config.User,
+		config.Password,
+		config.DBName,
+		config.SSLMode,
+	)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open postgres db: %w", err)
+	}
+	s := &DbConfigStore{db: db, logger: logger}
+	if err := removeDuplicateKeysAndNullKeysPostgres(s); err != nil {
+		return nil, fmt.Errorf("failed to clean duplicate keys: %w", err)
+	}
+	logger.Debug("running migration on Postgres DB")
+	if err := db.AutoMigrate(
+		&TableConfigHash{},
+		&TableProvider{},
+		&TableKey{},
+		&TableModel{},
+		&TableMCPClient{},
+		&TableClientConfig{},
+		&TableEnvKey{},
+		&TableVectorStoreConfig{},
+		&TableLogStoreConfig{},
+		&TableBudget{},
+		&TableRateLimit{},
+		&TableCustomer{},
+		&TableTeam{},
+		&TableVirtualKey{},
+		&TableConfig{},
+		&TableModelPricing{},
+		&TablePlugin{},
+	); err != nil {
+		return nil, fmt.Errorf("failed to auto-migrate postgres tables: %w", err)
+	}
+
+	return s, nil
+}
+
+// removeDuplicateKeysAndNullKeys removes duplicate keys based on key_id and value combination
+func removeDuplicateKeysAndNullKeysPostgres(s *DbConfigStore) error {
+	s.logger.Debug("removing duplicate keys and null keys from Postgres")
+	// Check whether config_keys exists in current schema
+	var exists bool
+	if err := s.db.Raw(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_schema = current_schema()
+			  AND table_name = ?
+		)
+	`, "config_keys").Scan(&exists).Error; err != nil {
+		return fmt.Errorf("failed to check if config_keys exists: %w", err)
+	}
+	if !exists {
+		s.logger.Debug("table config_keys does not exist, skipping Postgres cleanup")
+		return nil
+	}
+
+	// Remove null keys first
+	s.logger.Debug("removing null keys from the database")
+	if err := s.db.Exec("DELETE FROM config_keys WHERE key_id IS NULL OR value IS NULL").Error; err != nil {
+		return fmt.Errorf("failed to remove null keys: %w", err)
+	}
+
+	// Remove duplicates, keeping the row with the smallest ID
+	s.logger.Debug("deleting duplicate keys from the database")
+	result := s.db.Exec(`
+		WITH duplicates AS (
+			SELECT id
+			FROM (
+				SELECT id,
+				       ROW_NUMBER() OVER (PARTITION BY key_id, value ORDER BY id ASC) AS rn
+				FROM config_keys
+			) t
+			WHERE t.rn > 1
+		)
+		DELETE FROM config_keys
+		WHERE id IN (SELECT id FROM duplicates)
+	`)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to remove duplicate keys: %w", result.Error)
+	}
+
+	s.logger.Debug("Postgres migration complete")
+	return nil
 }
