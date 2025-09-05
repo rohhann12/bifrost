@@ -34,7 +34,6 @@ func (h *DbHandler) RegisterRoutes(r *router.Router) {
 }
 
 // GetDbState returns the current database configuration from memory
-// Following TODO: If config.json doesn't exist, show SQLite config from memory
 func (h *DbHandler) GetDbState(ctx *fasthttp.RequestCtx) {
 	configPath := filepath.Join(filepath.Dir(h.store.ConfigPath), "config.json")
 
@@ -92,7 +91,7 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 	var configData lib.ConfigData
 	if _, err := os.Stat(configPath); err == nil {
 		if data, err := os.ReadFile(configPath); err == nil {
-			_ = json.Unmarshal(data, &configData) // best effort
+			_ = json.Unmarshal(data, &configData)
 		}
 	}
 
@@ -112,7 +111,6 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 			"failed to write config.json", h.logger)
 		return
 	}
-
 	SendJSON(ctx, map[string]any{
 		"status":  "success",
 		"message": "config.json updated successfully",
