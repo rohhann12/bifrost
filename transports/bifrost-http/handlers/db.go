@@ -11,6 +11,7 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/maximhq/bifrost/transports/bifrost-http/utils"
 	"github.com/valyala/fasthttp"
 )
 
@@ -79,7 +80,7 @@ func (h *DbHandler) GetDbState(ctx *fasthttp.RequestCtx) {
 func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 	configPath := filepath.Join(filepath.Dir(h.store.ConfigPath), "config.json")
 
-	// Parse the Config struct from request body
+	// Parse the Config struct from request body (new target config)
 	var configStoreConfig configstore.Config
 	if err := json.Unmarshal(ctx.PostBody(), &configStoreConfig); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest,
@@ -87,11 +88,78 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Load existing config.json if it exists
+	// Load existing config.json if it exists (current running config)
 	var configData lib.ConfigData
 	if _, err := os.Stat(configPath); err == nil {
 		if data, err := os.ReadFile(configPath); err == nil {
 			_ = json.Unmarshal(data, &configData)
+		}
+	}
+	// figure out current and target db types
+	var currentType configstore.ConfigStoreType
+	if configData.ConfigStoreConfig != nil {
+		currentType = configData.ConfigStoreConfig.Type
+	}
+
+	// migrate only if db type is changing
+	if currentType != "" {
+		switch {
+		case currentType == "sqlite":
+			// unmarshal old SQLite config
+			var sqliteCfg configstore.SQLiteConfig
+			if b, err := json.Marshal(configData.ConfigStoreConfig.Config); err == nil {
+				_ = json.Unmarshal(b, &sqliteCfg)
+			}
+
+			// unmarshal new Postgres config
+			var postgresCfg configstore.PostgresConfig
+			if b, err := json.Marshal(configStoreConfig.Config); err == nil {
+				_ = json.Unmarshal(b, &postgresCfg)
+			}
+
+			sqliteDSN := fmt.Sprintf("sqlite://%s", sqliteCfg.Path)
+			postgresDSN := utils.CreatePostgresLink(
+				postgresCfg.Host,
+				postgresCfg.Port,
+				postgresCfg.User,
+				postgresCfg.Password,
+				postgresCfg.DBName,
+				postgresCfg.SSLMode,
+			)
+			h.logger.Info("1", sqliteDSN)
+			h.logger.Info("1", postgresDSN)
+			// Add the required third argument (e.g., context.Background() if it's a context.Context)
+			if err := configstore.MigrateFromSql(sqliteDSN, postgresDSN, h.logger); err != nil {
+				h.logger.Error(fmt.Sprintf("SQLite -> Postgres migration failed: %v", err))
+			}
+
+		case currentType == "postgres":
+			// unmarshal old Postgres config
+			var postgresCfg configstore.PostgresConfig
+			if b, err := json.Marshal(configData.ConfigStoreConfig.Config); err == nil {
+				_ = json.Unmarshal(b, &postgresCfg)
+			}
+
+			// unmarshal new SQLite config
+			var sqliteCfg configstore.SQLiteConfig
+			if b, err := json.Marshal(configStoreConfig.Config); err == nil {
+				_ = json.Unmarshal(b, &sqliteCfg)
+			}
+
+			postgresDSN := utils.CreatePostgresLink(
+				postgresCfg.Host,
+				postgresCfg.Port,
+				postgresCfg.User,
+				postgresCfg.Password,
+				postgresCfg.DBName,
+				postgresCfg.SSLMode,
+			)
+			sqliteDSN := fmt.Sprintf("sqlite://%s", sqliteCfg.Path)
+
+			if err := configstore.MigrateFromPostgres(postgresDSN, sqliteDSN, h.logger); err != nil {
+				h.logger.Error(fmt.Sprintf("Postgres -> SQLite migration failed: %v", err))
+
+			}
 		}
 	}
 
@@ -105,12 +173,12 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 			"failed to encode config", h.logger)
 		return
 	}
-
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError,
 			"failed to write config.json", h.logger)
 		return
 	}
+
 	SendJSON(ctx, map[string]any{
 		"status":  "success",
 		"message": "config.json updated successfully",
