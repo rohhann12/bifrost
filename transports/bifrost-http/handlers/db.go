@@ -204,7 +204,7 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 			"failed to encode config", h.logger)
 		return
 	}
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError,
 			"failed to write config.json", h.logger)
 		return
