@@ -38,19 +38,20 @@ const (
 type ModelProvider string
 
 const (
-	OpenAI    ModelProvider = "openai"
-	Azure     ModelProvider = "azure"
-	Anthropic ModelProvider = "anthropic"
-	Bedrock   ModelProvider = "bedrock"
-	Cohere    ModelProvider = "cohere"
-	Vertex    ModelProvider = "vertex"
-	Mistral   ModelProvider = "mistral"
-	Ollama    ModelProvider = "ollama"
-	Groq      ModelProvider = "groq"
-	SGL       ModelProvider = "sgl"
-	Parasail  ModelProvider = "parasail"
-	Cerebras  ModelProvider = "cerebras"
-	Gemini    ModelProvider = "gemini"
+	OpenAI      ModelProvider = "openai"
+	Azure       ModelProvider = "azure"
+	Anthropic   ModelProvider = "anthropic"
+	Bedrock     ModelProvider = "bedrock"
+	Cohere      ModelProvider = "cohere"
+	Vertex      ModelProvider = "vertex"
+	Mistral     ModelProvider = "mistral"
+	Ollama      ModelProvider = "ollama"
+	Groq        ModelProvider = "groq"
+	SGL         ModelProvider = "sgl"
+	Parasail    ModelProvider = "parasail"
+	Cerebras    ModelProvider = "cerebras"
+	Gemini      ModelProvider = "gemini"
+	HuggingFace ModelProvider = "huggingface"
 )
 
 // SupportedBaseProviders is the list of base providers allowed for custom providers.
