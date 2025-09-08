@@ -100,7 +100,7 @@ func (p *LoggerPlugin) getOrCreateStreamAccumulator(requestID string) *StreamAcc
 }
 
 // addStreamChunk adds a chunk to the stream accumulator
-func (p *LoggerPlugin) addStreamChunk(requestID string, chunk *StreamChunk, object string) error {
+func (p *LoggerPlugin) addStreamChunk(requestID string, chunk *StreamChunk, object string, isFinalChunk bool) error {
 	accumulator := p.getOrCreateStreamAccumulator(requestID)
 
 	accumulator.mu.Lock()
@@ -117,7 +117,7 @@ func (p *LoggerPlugin) addStreamChunk(requestID string, chunk *StreamChunk, obje
 	// Check if this is the final chunk
 	// Set FinalTimestamp when either FinishReason is present or token usage exists
 	// This handles both normal completion chunks and usage-only last chunks
-	if chunk.FinishReason != nil || chunk.TokenUsage != nil {
+	if isFinalChunk {
 		accumulator.FinalTimestamp = chunk.Timestamp
 	}
 
@@ -174,12 +174,32 @@ func (p *LoggerPlugin) processAccumulatedChunks(requestID string) error {
 		lastChunk := accumulator.Chunks[len(accumulator.Chunks)-1]
 		if lastChunk.TokenUsage != nil {
 			tempEntry.TokenUsageParsed = lastChunk.TokenUsage
-			if err := tempEntry.SerializeFields(); err == nil {
+			if err := tempEntry.SerializeFields(); err != nil {
+				p.logger.Error("failed to serialize token usage: %v", err)
+			} else {
 				updates["token_usage"] = tempEntry.TokenUsage
 				updates["prompt_tokens"] = lastChunk.TokenUsage.PromptTokens
 				updates["completion_tokens"] = lastChunk.TokenUsage.CompletionTokens
 				updates["total_tokens"] = lastChunk.TokenUsage.TotalTokens
 			}
+		}
+
+		// Handle cache debug
+		if lastChunk.SemanticCacheDebug != nil {
+			tempEntry.CacheDebugParsed = lastChunk.SemanticCacheDebug
+			if err := tempEntry.SerializeFields(); err != nil {
+				p.logger.Error("failed to serialize cache debug: %v", err)
+			} else {
+				updates["cache_debug"] = tempEntry.CacheDebug
+			}
+		}
+	}
+
+	// Update cost from final chunk if available
+	if len(accumulator.Chunks) > 0 {
+		lastChunk := accumulator.Chunks[len(accumulator.Chunks)-1]
+		if lastChunk.Cost != nil {
+			updates["cost"] = *lastChunk.Cost
 		}
 	}
 
@@ -295,9 +315,27 @@ func (p *LoggerPlugin) cleanupOldStreamAccumulators() {
 
 // handleStreamingResponse handles streaming responses with ordered accumulation
 func (p *LoggerPlugin) handleStreamingResponse(ctx *context.Context, result *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
-	requestID, ok := (*ctx).Value(ContextKey("request-id")).(string)
+	requestID, ok := (*ctx).Value(schemas.BifrostContextKey("request-id")).(string)
 	if !ok || requestID == "" {
 		p.logger.Error("request-id not found in context or is empty")
+		return result, err, nil
+	}
+
+	provider, ok := (*ctx).Value(schemas.BifrostContextKeyRequestProvider).(schemas.ModelProvider)
+	if !ok {
+		p.logger.Error("provider not found in context")
+		return result, err, nil
+	}
+
+	model, ok := (*ctx).Value(schemas.BifrostContextKeyRequestModel).(string)
+	if !ok {
+		p.logger.Error("model not found in context")
+		return result, err, nil
+	}
+
+	requestType, ok := (*ctx).Value(schemas.BifrostContextKeyRequestType).(schemas.RequestType)
+	if !ok {
+		p.logger.Error("request type not found in context")
 		return result, err, nil
 	}
 
@@ -327,39 +365,50 @@ func (p *LoggerPlugin) handleStreamingResponse(ctx *context.Context, result *sch
 		}
 	}
 
-	// Add chunk to accumulator synchronously to maintain order
-	object := ""
-	if result != nil {
-		object = result.Object
-	}
-	if addErr := p.addStreamChunk(requestID, chunk, object); addErr != nil {
-		p.logger.Error("failed to add stream chunk for request %s: %v", requestID, addErr)
-	}
+	isFinalChunk := bifrost.IsFinalChunk(ctx)
 
-	// If this is the final chunk, process accumulated chunks asynchronously
-	// Use the IsComplete flag to prevent duplicate processing
-	shouldProcess := false
-	if chunk.FinishReason != nil || chunk.TokenUsage != nil {
-		// Get the accumulator to check if processing has already been triggered
-		accumulator := p.getOrCreateStreamAccumulator(requestID)
-		accumulator.mu.Lock()
-		shouldProcess = !accumulator.IsComplete
+	go func() {
+		// Add chunk to accumulator synchronously to maintain order
+		object := ""
+		if result != nil {
+			if isFinalChunk {
+				if p.pricingManager != nil {
+					cost := p.pricingManager.CalculateCostWithCacheDebug(result, provider, model, requestType)
+					chunk.Cost = bifrost.Ptr(cost)
+				}
+				chunk.SemanticCacheDebug = result.ExtraFields.CacheDebug
+			}
 
-		// Mark as complete when we're about to process
-		if shouldProcess {
-			accumulator.IsComplete = true
+			object = result.Object
 		}
-		accumulator.mu.Unlock()
+		if addErr := p.addStreamChunk(requestID, chunk, object, isFinalChunk); addErr != nil {
+			p.logger.Error("failed to add stream chunk for request %s: %v", requestID, addErr)
+		}
 
-		if shouldProcess {
-			go func() {
+		// If this is the final chunk, process accumulated chunks asynchronously
+		// Use the IsComplete flag to prevent duplicate processing
+		shouldProcess := false
+		if isFinalChunk {
+			// Get the accumulator to check if processing has already been triggered
+			accumulator := p.getOrCreateStreamAccumulator(requestID)
+			accumulator.mu.Lock()
+			shouldProcess = !accumulator.IsComplete
+
+			// Mark as complete when we're about to process
+			if shouldProcess {
+				accumulator.IsComplete = true
+			}
+			accumulator.mu.Unlock()
+
+			if shouldProcess {
+
 				if processErr := p.processAccumulatedChunks(requestID); processErr != nil {
 					p.logger.Error("failed to process accumulated chunks for request %s: %v", requestID, processErr)
 				}
-			}()
+
+			}
 		}
-	}
+	}()
 
 	return result, err, nil
 }
-

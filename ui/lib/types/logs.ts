@@ -186,6 +186,17 @@ export interface LLMUsage {
 	completion_tokens_details?: CompletionTokensDetails;
 }
 
+export interface CacheDebug {
+	cache_hit: boolean;
+	cache_id?: string;
+	hit_type?: string;
+	provider_used?: string;
+	model_used?: string;
+	input_tokens?: number;
+	threshold?: number;
+	similarity?: number;
+}
+
 // Error types
 export interface ErrorField {
 	type?: string;
@@ -238,6 +249,8 @@ export interface LogEntry {
 	tool_calls?: ToolCall[];
 	latency?: number;
 	token_usage?: LLMUsage;
+	cache_debug?: CacheDebug;
+	cost?: number; // Cost in dollars (total cost of the request - includes cache lookup cost)
 	status: string; // "success" or "error"
 	error_details?: BifrostError;
 	stream: boolean; // true if this was a streaming response
@@ -261,7 +274,7 @@ export interface LogFilters {
 export interface Pagination {
 	limit: number;
 	offset: number;
-	sort_by: "timestamp" | "latency" | "token_usage.total_tokens";
+	sort_by: "timestamp" | "latency" | "tokens" | "cost";
 	order: "asc" | "desc";
 }
 
@@ -270,6 +283,7 @@ export interface LogStats {
 	success_rate: number;
 	average_latency: number;
 	total_tokens: number;
+	total_cost: number;
 }
 
 export interface LogsResponse {

@@ -84,11 +84,9 @@ func TestStreamingCacheBasicFunctionality(t *testing.T) {
 	// Validate that the second stream was cached
 	cached := false
 	for _, response := range responses2 {
-		if response.ExtraFields.CacheDebug != nil {
-			if response.ExtraFields.CacheDebug.CacheHit {
-				cached = true
-				break
-			}
+		if response.ExtraFields.CacheDebug != nil && response.ExtraFields.CacheDebug.CacheHit {
+			cached = true
+			break
 		}
 	}
 
@@ -253,8 +251,10 @@ func TestStreamingChunkOrdering(t *testing.T) {
 				i, originalIndex, cachedIndex)
 		}
 
-		// Verify this chunk was served from cache
-		AssertCacheHit(t, &cachedChunks[i], string(CacheTypeDirect))
+		// Only verify cache hit on the last chunk (where CacheDebug is set)
+		if i == len(cachedChunks)-1 {
+			AssertCacheHit(t, &cachedChunks[i], string(CacheTypeDirect))
+		}
 	}
 
 	// Verify chunks are in sequential order

@@ -79,6 +79,35 @@ var StandardProviders = []ModelProvider{
 	Vertex,
 }
 
+// RequestType represents the type of request being made to a provider.
+type RequestType string
+
+const (
+	TextCompletionRequest       RequestType = "text_completion"
+	ChatCompletionRequest       RequestType = "chat_completion"
+	ChatCompletionStreamRequest RequestType = "chat_completion_stream"
+	EmbeddingRequest            RequestType = "embedding"
+	SpeechRequest               RequestType = "speech"
+	SpeechStreamRequest         RequestType = "speech_stream"
+	TranscriptionRequest        RequestType = "transcription"
+	TranscriptionStreamRequest  RequestType = "transcription_stream"
+)
+
+// BifrostContextKey is a type for context keys used in Bifrost.
+type BifrostContextKey string
+
+// BifrostContextKeyRequestType is a context key for the request type.
+const (
+	BifrostContextKeyDirectKey          BifrostContextKey = "bifrost-direct-key"
+	BifrostContextKeyStreamEndIndicator BifrostContextKey = "bifrost-stream-end-indicator"
+	BifrostContextKeyRequestType        BifrostContextKey = "bifrost-request-type"
+	BifrostContextKeyRequestProvider    BifrostContextKey = "bifrost-request-provider"
+	BifrostContextKeyRequestModel       BifrostContextKey = "bifrost-request-model"
+)
+
+// NOTE: for custom plugin implementation dealing with streaming short circuit,
+// make sure to mark BifrostContextKeyStreamEndIndicator as true at the end of the stream.
+
 //* Request Structs
 
 // RequestInput represents the input for a model request, which can be either
@@ -164,7 +193,7 @@ type TranscriptionInput struct {
 	Language       *string `json:"language,omitempty"`
 	Prompt         *string `json:"prompt,omitempty"`
 	ResponseFormat *string `json:"response_format,omitempty"` // Default is "json"
-	Format     *string `json:"file_format,omitempty"`// Type of file, not required in openai, but required in gemini
+	Format         *string `json:"file_format,omitempty"`     // Type of file, not required in openai, but required in gemini
 }
 
 // BifrostRequest represents a request to be processed by Bifrost.
@@ -369,17 +398,16 @@ func (mc *MessageContent) UnmarshalJSON(data []byte) error {
 type ContentBlockType string
 
 const (
-	ContentBlockTypeText  ContentBlockType = "text"
-	ContentBlockTypeImage ContentBlockType = "image_url"
+	ContentBlockTypeText       ContentBlockType = "text"
+	ContentBlockTypeImage      ContentBlockType = "image_url"
 	ContentBlockTypeInputAudio ContentBlockType = "input_audio"
 )
 
 type ContentBlock struct {
-	Type     ContentBlockType `json:"type"`
-	Text     *string          `json:"text,omitempty"`
-	ImageURL *ImageURLStruct  `json:"image_url,omitempty"`
-	InputAudio *InputAudioStruct  `json:"input_audio,omitempty"`
-
+	Type       ContentBlockType  `json:"type"`
+	Text       *string           `json:"text,omitempty"`
+	ImageURL   *ImageURLStruct   `json:"image_url,omitempty"`
+	InputAudio *InputAudioStruct `json:"input_audio,omitempty"`
 }
 
 // ToolMessage represents a message from a tool
@@ -405,7 +433,7 @@ type ImageURLStruct struct {
 // Data carries the audio payload as a string (e.g., data URL or provider-accepted encoded content).
 // Format is optional (e.g., "wav", "mp3"); when nil, providers may attempt auto-detection.
 type InputAudioStruct struct {
-	Data string `json:"data"`
+	Data   string  `json:"data"`
 	Format *string `json:"format,omitempty"`
 }
 
@@ -697,17 +725,25 @@ type BifrostResponseExtraFields struct {
 	ChatHistory *[]BifrostMessage  `json:"chat_history,omitempty"`
 	BilledUsage *BilledLLMUsage    `json:"billed_usage,omitempty"`
 	ChunkIndex  int                `json:"chunk_index"` // used for streaming responses to identify the chunk index, will be 0 for non-streaming responses
-	RawResponse interface{}        `json:"raw_response"`
+	RawResponse interface{}        `json:"raw_response,omitempty"`
 	CacheDebug  *BifrostCacheDebug `json:"cache_debug,omitempty"`
 }
 
 // BifrostCacheDebug represents debug information about the cache.
 type BifrostCacheDebug struct {
-	CacheHit        bool     `json:"cache_hit"`
-	CacheHitType    string   `json:"cache_hit_type"`
-	CacheID         string   `json:"cache_id"`
-	CacheThreshold  *float64 `json:"cache_threshold,omitempty"`
-	CacheSimilarity *float64 `json:"cache_similarity,omitempty"`
+	CacheHit bool `json:"cache_hit"`
+
+	CacheID *string `json:"cache_id,omitempty"`
+	HitType *string `json:"hit_type,omitempty"`
+
+	// Semantic cache only (provider, model, and input tokens will be present for semantic cache, even if cache is not hit)
+	ProviderUsed *string `json:"provider_used,omitempty"`
+	ModelUsed    *string `json:"model_used,omitempty"`
+	InputTokens  *int    `json:"input_tokens,omitempty"`
+
+	// Semantic cache only (only when cache is hit)
+	Threshold  *float64 `json:"threshold,omitempty"`
+	Similarity *float64 `json:"similarity,omitempty"`
 }
 
 const (

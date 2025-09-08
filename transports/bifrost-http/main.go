@@ -71,6 +71,7 @@ import (
 	"github.com/fasthttp/router"
 	bifrost "github.com/maximhq/bifrost/core"
 	schemas "github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/pricing"
 	"github.com/maximhq/bifrost/plugins/governance"
 	"github.com/maximhq/bifrost/plugins/logging"
 	"github.com/maximhq/bifrost/plugins/maxim"
@@ -331,6 +332,12 @@ func main() {
 		logger.Fatal("failed to load config %v", err)
 	}
 
+	// Initialize pricing manager
+	pricingManager, err := pricing.Init(config.ConfigStore, logger)
+	if err != nil {
+		logger.Fatal("failed to initialize pricing manager: %v", err)
+	}
+
 	// Create account backed by the high-performance store (all processing is done in LoadFromDatabase)
 	// The account interface now benefits from ultra-fast config access times via in-memory storage
 	account := lib.NewBaseAccount(config)
@@ -341,7 +348,9 @@ func main() {
 	telemetry.InitPrometheusMetrics(config.ClientConfig.PrometheusLabels)
 	logger.Debug("prometheus Go/Process collectors registered.")
 
-	promPlugin := telemetry.NewPrometheusPlugin()
+	promPlugin := telemetry.Init(pricingManager)
+
+	loadedPlugins = append(loadedPlugins, promPlugin)
 
 	var loggingPlugin *logging.LoggerPlugin
 	var loggingHandler *handlers.LoggingHandler
@@ -349,7 +358,7 @@ func main() {
 
 	if config.ClientConfig.EnableLogging && config.LogsStore != nil {
 		// Use dedicated logs database with high-scale optimizations
-		loggingPlugin, err = logging.Init(logger, config.LogsStore)
+		loggingPlugin, err = logging.Init(logger, config.LogsStore, pricingManager)
 		if err != nil {
 			logger.Fatal("failed to initialize logging plugin: %v", err)
 		}
@@ -366,7 +375,7 @@ func main() {
 		// Initialize governance plugin
 		governancePlugin, err = governance.Init(ctx, &governance.Config{
 			IsVkMandatory: &config.ClientConfig.EnforceGovernanceHeader,
-		}, logger, config.ConfigStore, config.GovernanceConfig)
+		}, logger, config.ConfigStore, config.GovernanceConfig, pricingManager)
 		if err != nil {
 			logger.Error("failed to initialize governance plugin: %s", err.Error())
 		} else {
@@ -425,11 +434,6 @@ func main() {
 				}
 			}
 
-			// Set hardcoded values
-			semCacheConfig.CacheKey = "request-cache-key"
-			semCacheConfig.CacheTTLKey = "request-cache-ttl"
-			semCacheConfig.CacheThresholdKey = "request-cache-threshold"
-
 			semanticCachePlugin, err := semanticcache.Init(ctx, semCacheConfig, logger, config.VectorStore)
 			if err != nil {
 				logger.Error("failed to initialize semantic cache: %v", err)
@@ -439,8 +443,6 @@ func main() {
 			}
 		}
 	}
-
-	loadedPlugins = append(loadedPlugins, promPlugin)
 
 	client, err := bifrost.Init(ctx, schemas.BifrostConfig{
 		Account:            account,
