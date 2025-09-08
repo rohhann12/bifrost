@@ -11,7 +11,6 @@ import (
 // sqlitePath: path to the SQLite .db file
 // postgresLink: connection string for Postgres (e.g. "pgsql://user:pass@host/dbname")
 func MigrateFromSql(sqlitePath, postgresLink string, logger schemas.Logger) error {
-	logger.Info("Starting migration: SQLite → Postgres", sqlitePath, postgresLink)
 
 	cmd := exec.Command("pgloader",
 		fmt.Sprintf("sqlite:///%s", sqlitePath),
@@ -33,7 +32,6 @@ func MigrateFromSql(sqlitePath, postgresLink string, logger schemas.Logger) erro
 
 // Migration from Postgres back to SQLite
 func MigrateFromPostgres(sqlitePath, postgresLink string, logger schemas.Logger) error {
-	logger.Info("Starting migration: Postgres → SQLite")
 
 	cmd := exec.Command("pgloader",
 		postgresLink,
