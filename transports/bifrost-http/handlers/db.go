@@ -88,8 +88,14 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 
 	var configData lib.ConfigData
 	if _, err := os.Stat(configPath); err == nil {
-		if data, err := os.ReadFile(configPath); err == nil {
-			_ = json.Unmarshal(data, &configData)
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to read config.json: %v", err), h.logger)
+			return
+		}
+		if err := json.Unmarshal(data, &configData); err != nil {
+			SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("invalid config.json: %v", err), h.logger)
+			return
 		}
 	}
 	// Update config and write back to config.json

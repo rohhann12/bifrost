@@ -155,8 +155,11 @@ const DbConfigCard = () => {
                   <SelectValue placeholder="Select SSL Mode" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="disable">Disable</SelectItem>
-                  <SelectItem value="enable">Enable</SelectItem>
+                  <SelectItem value="disable">disable</SelectItem>
+                  <SelectItem value="prefer">prefer</SelectItem>
+                  <SelectItem value="require">require</SelectItem>
+                  <SelectItem value="verify-ca">verify-ca</SelectItem>
+                  <SelectItem value="verify-full">verify-full</SelectItem>
                 </SelectContent>
               </Select>
             </div>
