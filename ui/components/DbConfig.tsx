@@ -79,7 +79,6 @@ const DbConfigCard = () => {
                 sslMode: pgConfig.sslmode,
               },
             };
-      console.log(payload)
       await updateDbConfig(payload).unwrap();
 
       toast.success("Database config updated successfully.");

@@ -152,7 +152,7 @@ export interface PostgresConfig {
 		port: number;
 		user: string;
 		password: string;
-		database: string;
+		dbName: string;
 		sslMode:string
 	};
 }

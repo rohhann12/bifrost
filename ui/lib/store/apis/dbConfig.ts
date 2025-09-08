@@ -1,6 +1,5 @@
 import { baseApi } from "./baseApi";
 
-// Types (adjust as per your backend responses)
 export interface DbConfig {
   enabled: boolean;
   type: string;
