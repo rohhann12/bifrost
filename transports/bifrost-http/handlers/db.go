@@ -85,7 +85,6 @@ func (h *DbHandler) UpdateDbState(ctx *fasthttp.RequestCtx) {
 			fmt.Sprintf("invalid config format: %v", err), h.logger)
 		return
 	}
-	h.logger.Info("Successfully unmarshaled data: %+v", newConfig)
 
 	var configData lib.ConfigData
 	if _, err := os.Stat(configPath); err == nil {
