@@ -282,16 +282,6 @@ export interface RedisConfig {
 	username?: string;
 	password?: string;
 	db?: number;
-	pool_size?: number;
-	max_active_conns?: number;
-	min_idle_conns?: number;
-	max_idle_conns?: number;
-	conn_max_lifetime?: number; // Duration in seconds
-	conn_max_idle_time?: number; // Duration in seconds
-	dial_timeout?: number; // Duration in seconds
-	read_timeout?: number; // Duration in seconds
-	write_timeout?: number; // Duration in seconds
-	context_timeout?: number; // Duration in seconds
 }
 
 export interface VectorStoreConfig {
