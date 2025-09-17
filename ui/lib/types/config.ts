@@ -268,5 +268,50 @@ export interface ProviderFormData {
 	custom_provider_config?: FormCustomProviderConfig;
 }
 
+// Vector Store Configuration Types
+export type VectorStoreType = "weaviate" | "redis";
+
+export interface WeaviateConfig {
+	scheme: string;
+	host: string;
+	api_key?: string;
+}
+
+export interface RedisConfig {
+	addr: string;
+	username?: string;
+	password?: string;
+	db?: number;
+	pool_size?: number;
+	max_active_conns?: number;
+	min_idle_conns?: number;
+	max_idle_conns?: number;
+	conn_max_lifetime?: number; // Duration in seconds
+	conn_max_idle_time?: number; // Duration in seconds
+	dial_timeout?: number; // Duration in seconds
+	read_timeout?: number; // Duration in seconds
+	write_timeout?: number; // Duration in seconds
+	context_timeout?: number; // Duration in seconds
+}
+
+export interface VectorStoreConfig {
+	enabled: boolean;
+	type: VectorStoreType;
+	config: WeaviateConfig | RedisConfig;
+}
+
+// Log Store Configuration Types
+export type LogStoreType = "sqlite";
+
+export interface SQLiteConfig {
+	path: string;
+}
+
+export interface LogStoreConfig {
+	enabled: boolean;
+	type: LogStoreType;
+	config: SQLiteConfig;
+}
+
 // Status types
 export type ProviderStatus = "active" | "error" | "added" | "updated" | "deleted";

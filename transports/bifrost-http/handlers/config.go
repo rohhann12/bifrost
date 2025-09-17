@@ -9,6 +9,8 @@ import (
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
+	"github.com/maximhq/bifrost/framework/logstore"
+	"github.com/maximhq/bifrost/framework/vectorstore"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
@@ -37,6 +39,14 @@ func (h *ConfigHandler) RegisterRoutes(r *router.Router) {
 	r.GET("/api/config", h.getConfig)
 	r.PUT("/api/config", h.updateConfig)
 	r.GET("/api/version", h.getVersion)
+	
+	// Vector store configuration endpoints
+	r.GET("/api/config/vector-store", h.getVectorStoreConfig)
+	r.PUT("/api/config/vector-store", h.updateVectorStoreConfig)
+	
+	// Log store configuration endpoints
+	r.GET("/api/config/log-store", h.getLogStoreConfig)
+	r.PUT("/api/config/log-store", h.updateLogStoreConfig)
 }
 
 // getVersion handles GET /api/version - Get the current version
@@ -124,8 +134,87 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 	}
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	SendJSON(ctx, map[string]any{
-		"status":  "success",
-		"message": "configuration updated successfully",
-	}, h.logger)
+	SendJSON(ctx, map[string]string{"status": "success"}, h.logger)
+}
+
+// getVectorStoreConfig handles GET /api/config/vector-store - Get the current vector store configuration
+func (h *ConfigHandler) getVectorStoreConfig(ctx *fasthttp.RequestCtx) {
+	if h.store.ConfigStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "config store not available", h.logger)
+		return
+	}
+
+	config, err := h.store.ConfigStore.GetVectorStoreConfig()
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError,
+			fmt.Sprintf("failed to fetch vector store config: %v", err), h.logger)
+		return
+	}
+
+	SendJSON(ctx, config, h.logger)
+}
+
+// updateVectorStoreConfig handles PUT /api/config/vector-store - Update vector store configuration
+func (h *ConfigHandler) updateVectorStoreConfig(ctx *fasthttp.RequestCtx) {
+	if h.store.ConfigStore == nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Config store not initialized", h.logger)
+		return
+	}
+
+	var req vectorstore.Config
+
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid request format: %v", err), h.logger)
+		return
+	}
+
+	if err := h.store.ConfigStore.UpdateVectorStoreConfig(&req); err != nil {
+		h.logger.Warn(fmt.Sprintf("failed to save vector store configuration: %v", err))
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to save vector store configuration: %v", err), h.logger)
+		return
+	}
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	SendJSON(ctx, map[string]string{"status": "success"}, h.logger)
+}
+
+// getLogStoreConfig handles GET /api/config/log-store - Get the current log store configuration
+func (h *ConfigHandler) getLogStoreConfig(ctx *fasthttp.RequestCtx) {
+	if h.store.ConfigStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "config store not available", h.logger)
+		return
+	}
+
+	config, err := h.store.ConfigStore.GetLogsStoreConfig()
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError,
+			fmt.Sprintf("failed to fetch log store config: %v", err), h.logger)
+		return
+	}
+
+	SendJSON(ctx, config, h.logger)
+}
+
+// updateLogStoreConfig handles PUT /api/config/log-store - Update log store configuration
+func (h *ConfigHandler) updateLogStoreConfig(ctx *fasthttp.RequestCtx) {
+	if h.store.ConfigStore == nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "Config store not initialized", h.logger)
+		return
+	}
+
+	var req logstore.Config
+
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("Invalid request format: %v", err), h.logger)
+		return
+	}
+
+	if err := h.store.ConfigStore.UpdateLogsStoreConfig(&req); err != nil {
+		h.logger.Warn(fmt.Sprintf("failed to save log store configuration: %v", err))
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to save log store configuration: %v", err), h.logger)
+		return
+	}
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	SendJSON(ctx, map[string]string{"status": "success"}, h.logger)
 }
