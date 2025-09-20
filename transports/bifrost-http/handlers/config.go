@@ -39,11 +39,9 @@ func (h *ConfigHandler) RegisterRoutes(r *router.Router) {
 	r.GET("/api/config", h.getConfig)
 	r.PUT("/api/config", h.updateConfig)
 	r.GET("/api/version", h.getVersion)
-	
 	// Vector store configuration endpoints
 	r.GET("/api/config/vector-store", h.getVectorStoreConfig)
 	r.PUT("/api/config/vector-store", h.updateVectorStoreConfig)
-	
 	// Log store configuration endpoints
 	r.GET("/api/config/log-store", h.getLogStoreConfig)
 	r.PUT("/api/config/log-store", h.updateLogStoreConfig)
@@ -144,7 +142,7 @@ func (h *ConfigHandler) getVectorStoreConfig(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	config, err := h.store.ConfigStore.GetVectorStoreConfig()
+	config, err := h.store.GetVectorStoreConfigRedacted()
 	if err != nil {
 		SendError(ctx, fasthttp.StatusInternalServerError,
 			fmt.Sprintf("failed to fetch vector store config: %v", err), h.logger)
@@ -168,7 +166,25 @@ func (h *ConfigHandler) updateVectorStoreConfig(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if err := h.store.ConfigStore.UpdateVectorStoreConfig(&req); err != nil {
+	// Get the raw config to access actual values for merging with redacted request values
+	oldConfigRaw, err := h.store.ConfigStore.GetVectorStoreConfig()
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to get current vector store config: %v", err), h.logger)
+		return
+	}
+
+	if oldConfigRaw == nil {
+		oldConfigRaw = &vectorstore.Config{}
+	}
+
+	// Merge redacted values with actual values
+	mergedConfig, err := h.mergeVectorStoreConfig(oldConfigRaw, &req)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, fmt.Sprintf("failed to merge vector store config: %v", err), h.logger)
+		return
+	}
+
+	if err := h.store.ConfigStore.UpdateVectorStoreConfig(mergedConfig); err != nil {
 		h.logger.Warn(fmt.Sprintf("failed to save vector store configuration: %v", err))
 		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to save vector store configuration: %v", err), h.logger)
 		return
@@ -217,4 +233,40 @@ func (h *ConfigHandler) updateLogStoreConfig(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	SendJSON(ctx, map[string]string{"status": "success"}, h.logger)
+}
+
+// mergeVectorStoreConfig merges new config with old, preserving values that are redacted in the new config
+func (h *ConfigHandler) mergeVectorStoreConfig(oldConfig *vectorstore.Config, newConfig *vectorstore.Config) (*vectorstore.Config, error) {
+	// Start with the new config
+	merged := *newConfig
+
+	// Handle different vector store types
+	if oldConfig.Type == newConfig.Type {
+		switch newConfig.Type {
+		case vectorstore.VectorStoreTypeWeaviate:
+			oldWeaviateConfig, oldOk := oldConfig.Config.(*vectorstore.WeaviateConfig)
+			newWeaviateConfig, newOk := newConfig.Config.(*vectorstore.WeaviateConfig)
+			if oldOk && newOk {
+				mergedWeaviateConfig := *newWeaviateConfig
+				// Preserve old API key if new one is redacted
+				if lib.IsRedacted(newWeaviateConfig.ApiKey) && oldWeaviateConfig.ApiKey != "" {
+					mergedWeaviateConfig.ApiKey = oldWeaviateConfig.ApiKey
+				}
+				merged.Config = &mergedWeaviateConfig
+			}
+		case vectorstore.VectorStoreTypeRedis:
+			oldRedisConfig, oldOk := oldConfig.Config.(*vectorstore.RedisConfig)
+			newRedisConfig, newOk := newConfig.Config.(*vectorstore.RedisConfig)
+			if oldOk && newOk {
+				mergedRedisConfig := *newRedisConfig
+				// Preserve old password if new one is redacted
+				if lib.IsRedacted(newRedisConfig.Addr) && oldRedisConfig.Addr != "" {
+					mergedRedisConfig.Addr = oldRedisConfig.Addr
+				}
+				merged.Config = &mergedRedisConfig
+			}
+		}
+	}
+
+	return &merged, nil
 }
